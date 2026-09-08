@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FractalChess</title>
+<style>
+  html,body{margin:0;padding:0;background:#111;color:#ddd;font:13px/1.4 system-ui,sans-serif;overflow:hidden;height:100%;}
+  #controls{position:fixed;top:0;left:0;right:0;z-index:10;background:#1b1b1b;border-bottom:1px solid #333;
+    padding:8px 10px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;}
+  #pieceList{display:flex;flex-direction:column;gap:4px;}
+  .pieceRow{display:flex;gap:6px;align-items:center;}
+  .pieceRow select{background:#222;color:#ddd;border:1px solid #444;}
+  .pieceRow input[type=number]{width:46px;background:#222;color:#ddd;border:1px solid #444;}
+  .pieceRow button{background:#402020;color:#ddd;border:1px solid #663333;cursor:pointer;}
+  .col{display:flex;flex-direction:column;gap:4px;}
+  button{cursor:pointer;background:#2a2a2a;color:#ddd;border:1px solid #444;padding:4px 8px;border-radius:3px;}
+  button:hover{background:#333;}
+  select{padding:2px;}
+  #stats{white-space:pre;font-family:monospace;color:#8f8;align-self:flex-start;}
+  #genPauseBtn{margin-top:8px;}
+  canvas{position:fixed;top:0;left:0;width:100%;height:100%;cursor:grab;}
+  canvas.dragging{cursor:grabbing;}
+</style>
+</head>
+<body>
+<div id="controls">
+  <div class="col">
+    <div id="pieceList"></div>
+    <button id="addPiece">+ Add piece</button>
+  </div>
+  <div class="col">
+    <label>View size
+      <select id="texSize">
+        <option>128</option><option>256</option><option>512</option>
+        <option selected>1024</option><option>2048</option><option>4096</option><option>8192</option>
+      </select>
+    </label>
+    <button id="genPauseBtn">Generate</button>
+  </div>
+  <div id="stats">loading wasm core...</div>
+</div>
+<canvas id="glcanvas"></canvas>
+<script type="module">
+import init, * as wasmMod from './wasm-pkg/wasm_core.js';
+
+const PIECE_BASE = {
+  wazir:      [[1,0],[-1,0],[0,1],[0,-1]],
+  ferz:       [[1,1],[1,-1],[-1,1],[-1,-1]],
+  dabbaba:    [[2,0],[-2,0],[0,2],[0,-2]],
+  alfil:      [[2,2],[2,-2],[-2,2],[-2,-2]],
+  dromedary:  [[3,0],[-3,0],[0,3],[0,-3]],
+  knight:     expandLeaper(2,1),
+  zebra:      expandLeaper(3,2),
+  antelope:   expandLeaper(4,3),
+};
+function expandLeaper(a,b){
+  if(a===b) return [[a,a],[a,-a],[-a,a],[-a,-a]];
+  if(a===0||b===0){const n=a||b; return [[n,0],[-n,0],[0,n],[0,-n]];}
+  return [[a,b],[a,-b],[-a,b],[-a,-b],[b,a],[b,-a],[-b,a],[-b,-a]];
+}
+function hexToRGB(hex){
+  const n = parseInt(hex.slice(1),16);
+  return [(n>>16)&255,(n>>8)&255,n&255];
+}
+function flattenOffsets(offsets){
+  const arr = new Int32Array(offsets.length*2);
+  offsets.forEach(([dx,dy],i)=>{ arr[i*2]=dx; arr[i*2+1]=dy; });
+  return arr;
+}
+
+// ---------- state ----------
+// Generation happens exactly once per Generate click: the texture is filled
+// edge-to-edge (radius texSize/2, native 1:1) plus a thin halo just beyond
+// that, sized to the single largest piece offset in play, so that pieces
+// right at the texture's edge still see every square that could attack them
+// even though it's just outside the visible area (the halo itself is never
+// drawn -- it falls outside the pixel bounds naturally). After that, pan and
+// zoom are pure screen-space camera moves over the finished texture: no wasm
+// calls, no re-rasterizing, no merging cells into pixels.
+let wasmExports = null;
+let texSize = 1024;
+let numPlayers = 0;
+let windowRadius = 512;   // texSize/2: the rendered, camera-explorable area
+let targetRadius = 512;   // windowRadius + max piece offset (generation-only)
+let camZoom = 1;
+let panX = 0, panY = 0;   // screen-space camera offset, in pixels
+let generating = false;
+let paused = false;
+let ready = false;
+
+// ---------- WebGL ----------
+const canvas = document.getElementById('glcanvas');
+const gl = canvas.getContext('webgl');
+let tex, prog, uScaleLoc, uOffsetLoc;
+function initGL(){
+  const vs = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vs, `attribute vec2 p; varying vec2 uv; uniform vec2 uScale; uniform vec2 uOffset; void main(){ uv=(p+1.0)*0.5; uv.y=1.0-uv.y; gl_Position=vec4(p*uScale+uOffset,0.0,1.0);} `);
+  gl.compileShader(vs);
+  const fs = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fs, `precision mediump float; varying vec2 uv; uniform sampler2D tex; void main(){ gl_FragColor=texture2D(tex,uv);} `);
+  gl.compileShader(fs);
+  prog = gl.createProgram();
+  gl.attachShader(prog,vs); gl.attachShader(prog,fs); gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const loc = gl.getAttribLocation(prog,'p');
+  gl.enableVertexAttribArray(loc);
+  gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+  uScaleLoc = gl.getUniformLocation(prog,'uScale');
+  uOffsetLoc = gl.getUniformLocation(prog,'uOffset');
+  tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  // Plain bilinear only blends a 2x2 texel neighborhood, which still
+  // undersamples once zoomed out far enough (moire/uneven pixels). Mipmaps
+  // pre-average the texture at each downsampled level so minification
+  // actually samples a properly blurred version instead of raw texels.
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+let texAllocSize = 0;
+function uploadTexture(){
+  const ptr = wasmMod.pixel_ptr();
+  const view = new Uint8Array(wasmExports.memory.buffer, ptr, texSize*texSize*4);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  if(texAllocSize !== texSize){
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,texSize,texSize,0,gl.RGBA,gl.UNSIGNED_BYTE,view);
+    texAllocSize = texSize;
+  } else {
+    gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,texSize,texSize,gl.RGBA,gl.UNSIGNED_BYTE,view);
+  }
+  gl.generateMipmap(gl.TEXTURE_2D);
+}
+function draw(){
+  resizeCanvas();
+  gl.viewport(0,0,canvas.width,canvas.height);
+  gl.clearColor(0.02,0.02,0.09,1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const px = texSize*camZoom;
+  gl.uniform2f(uScaleLoc, px/canvas.width, px/canvas.height);
+  gl.uniform2f(uOffsetLoc, (panX/canvas.width)*2, -(panY/canvas.height)*2);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+}
+function resizeCanvas(){
+  const w = window.innerWidth, h = window.innerHeight;
+  if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
+}
+window.addEventListener('resize', ()=>{ resizeCanvas(); draw(); });
+
+// ---------- render loop (drives the one-shot initial generation only) ----------
+let loopRunning = false;
+function loop(){
+  const stillGenerating = !paused && !wasmMod.target_reached(targetRadius);
+  if(stillGenerating){
+    const t0 = performance.now();
+    const budget = 40;
+    const chunk = 5000;
+    while(performance.now()-t0 < budget && !wasmMod.target_reached(targetRadius)){
+      wasmMod.simulate_batch(targetRadius, chunk);
+    }
+    uploadTexture(); draw(); updateStats();
+  }
+  if(stillGenerating){
+    requestAnimationFrame(loop);
+  } else {
+    loopRunning = false;
+  }
+  updateGenPauseBtn();
+}
+function ensureGenerating(){
+  if(!loopRunning && ready){ loopRunning = true; requestAnimationFrame(loop); }
+  updateGenPauseBtn();
+}
+function updateGenPauseBtn(){
+  document.getElementById('genPauseBtn').textContent = (loopRunning && !paused) ? 'Stop' : 'Generate';
+}
+function updateStats(){
+  document.getElementById('stats').textContent =
+    `placed: ${Math.round(wasmMod.placed_count())}\ncolors: ${numPlayers}`;
+}
+
+// ---------- piece list UI ----------
+const NAMED = ['knight','wazir','ferz','dabbaba','alfil','dromedary','zebra','antelope','custom'];
+function pieceRow(defaultPiece, defaultColor){
+  const row = document.createElement('div');
+  row.className='pieceRow';
+  const sel = document.createElement('select');
+  for(const n of NAMED){ const o=document.createElement('option'); o.value=n; o.textContent=n[0].toUpperCase()+n.slice(1); sel.appendChild(o); }
+  sel.value = defaultPiece;
+  const dx = document.createElement('input'); dx.type='number'; dx.value=2; dx.title='dx';
+  const dy = document.createElement('input'); dy.type='number'; dy.value=1; dy.title='dy';
+  dx.style.display = dy.style.display = sel.value==='custom' ? 'inline-block':'none';
+  sel.addEventListener('change', ()=>{ dx.style.display=dy.style.display = sel.value==='custom'?'inline-block':'none'; });
+  const color = document.createElement('input'); color.type='color'; color.value=defaultColor;
+  const rm = document.createElement('button'); rm.textContent='x';
+  rm.addEventListener('click', ()=>row.remove());
+  row.appendChild(sel); row.appendChild(dx); row.appendChild(dy); row.appendChild(color); row.appendChild(rm);
+  row._get = ()=>({
+    offsets: sel.value==='custom' ? expandLeaper(parseInt(dx.value)||0, parseInt(dy.value)||0) : PIECE_BASE[sel.value],
+    color: color.value
+  });
+  return row;
+}
+const pieceList = document.getElementById('pieceList');
+pieceList.appendChild(pieceRow('knight','#000000'));
+pieceList.appendChild(pieceRow('knight','#cc2222'));
+document.getElementById('addPiece').addEventListener('click', ()=>{
+  const palette = ['#22aacc','#22cc55','#cc8822','#aa22cc','#cccc22','#444444'];
+  pieceList.appendChild(pieceRow('knight', palette[pieceList.children.length%palette.length]));
+});
+
+// ---------- generate / control ----------
+function generate(){
+  if(!wasmExports) return;
+  texSize = parseInt(document.getElementById('texSize').value);
+  const rows = [...pieceList.children];
+  if(rows.length===0) return;
+  wasmMod.config_reset();
+  let maxOffset = 0;
+  for(const r of rows){
+    const {offsets,color} = r._get();
+    const [rr,gg,bb] = hexToRGB(color);
+    wasmMod.config_add_piece(rr,gg,bb, flattenOffsets(offsets));
+    for(const [dx,dy] of offsets) maxOffset = Math.max(maxOffset, Math.abs(dx), Math.abs(dy));
+  }
+  wasmMod.start(texSize);
+  numPlayers = rows.length;
+  windowRadius = texSize/2;
+  targetRadius = windowRadius + maxOffset;
+  panX = 0; panY = 0;
+  resizeCanvas();
+  camZoom = Math.max(canvas.width, canvas.height) / texSize;
+
+  paused = false;
+  uploadTexture(); draw(); updateStats();
+  ensureGenerating();
+}
+document.getElementById('genPauseBtn').addEventListener('click', ()=>{
+  if(loopRunning && !paused){
+    paused = true;
+    updateGenPauseBtn();
+  } else {
+    generate();
+  }
+});
+
+// ---------- pan / zoom ----------
+let dragging=false, lastX=0, lastY=0;
+canvas.addEventListener('mousedown', e=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; canvas.classList.add('dragging'); });
+window.addEventListener('mouseup', ()=>{ dragging=false; canvas.classList.remove('dragging'); });
+window.addEventListener('mousemove', e=>{
+  if(!dragging || !ready) return;
+  panX += e.clientX-lastX;
+  panY += e.clientY-lastY;
+  lastX=e.clientX; lastY=e.clientY;
+  draw();
+});
+canvas.addEventListener('wheel', e=>{
+  if(!ready) return;
+  e.preventDefault();
+  const requested = e.deltaY>0 ? 1.15 : 1/1.15;
+  const oldZoom = camZoom;
+  camZoom = Math.min(200, Math.max(0.02, camZoom*requested));
+  const actual = camZoom/oldZoom;
+  // Rescale pan by the same factor so whatever point is currently at screen
+  // center stays there -- otherwise zoom would drift toward the texture's
+  // own center instead of pivoting on the visible area's center.
+  panX *= actual;
+  panY *= actual;
+  draw();
+}, {passive:false});
+
+(async function boot(){
+  wasmExports = await init();
+  initGL();
+  resizeCanvas();
+  ready = true;
+  generate();
+})();
+</script>
+</body>
+</html>
