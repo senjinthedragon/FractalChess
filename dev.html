@@ -5,64 +5,99 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>FractalChess</title>
 <style>
-  html,body{margin:0;padding:0;background:#111;color:#ddd;font:13px/1.4 system-ui,sans-serif;overflow:hidden;height:100%;}
-  #controls{position:fixed;top:0;left:0;right:0;z-index:10;background:#1b1b1b;border-bottom:1px solid #333;
-    padding:8px 10px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;}
-  #pieceList{display:flex;flex-direction:column;gap:8px;}
-  .pieceRow{display:flex;flex-direction:column;gap:3px;padding-bottom:6px;border-bottom:1px solid #2a2a2a;}
-  .pieceHeader{display:flex;gap:6px;align-items:center;}
-  .pieceHeader select{background:#222;color:#ddd;border:1px solid #444;}
-  .pieceHeader > button{background:#402020;color:#ddd;border:1px solid #663333;cursor:pointer;padding:2px 7px;}
-  .col{display:flex;flex-direction:column;gap:4px;}
-  button{cursor:pointer;background:#2a2a2a;color:#ddd;border:1px solid #444;padding:4px 8px;border-radius:3px;}
-  button:hover{background:#333;}
-  select{padding:2px;}
-  #stats{white-space:pre;font-family:monospace;color:#8f8;align-self:flex-start;}
-  #genPauseBtn{margin-top:8px;}
-  canvas{position:fixed;left:0;cursor:grab;touch-action:none;}
+  :root{
+    --bg:#111417; --panel:#181c20; --panel2:#1e2328; --border:#2b3138;
+    --text:#e4e7ea; --muted:#8b95a1; --accent:#5ac88a; --accent2:#4a9eff;
+  }
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    overflow:hidden;height:100%;}
+  body{display:flex;}
+
+  #sidebar{flex:0 0 280px;width:280px;height:100vh;box-sizing:border-box;overflow-y:auto;
+    background:var(--panel);border-right:1px solid var(--border);
+    padding:16px;display:flex;flex-direction:column;gap:18px;}
+  #sidebar h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.02em;color:var(--text);}
+  #sidebar .section{display:flex;flex-direction:column;gap:8px;}
+  #sidebar .sectionLabel{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
+
+  #pieceList{display:flex;flex-direction:column;gap:10px;}
+  .pieceRow{display:flex;flex-direction:column;gap:6px;padding:8px;background:var(--panel2);
+    border:1px solid var(--border);border-radius:6px;}
+  .pieceHeader{display:flex;gap:8px;align-items:center;}
+  .pieceHeader select{flex:1;min-width:0;}
+  .pieceHeader input[type=color]{width:28px;height:28px;padding:0;border:1px solid var(--border);
+    border-radius:4px;background:none;cursor:pointer;flex-shrink:0;}
+  .pieceHeader .rmBtn{background:#3a1f1f;color:#e4b4b4;border:1px solid #5a2c2c;flex-shrink:0;
+    width:26px;height:26px;padding:0;border-radius:4px;}
+  .pieceHeader .rmBtn:hover{background:#4a2626;}
+
+  select,input,textarea{background:#12151a;color:var(--text);border:1px solid var(--border);
+    border-radius:4px;padding:5px 6px;font:inherit;}
+  button{cursor:pointer;background:var(--panel2);color:var(--text);border:1px solid var(--border);
+    padding:7px 10px;border-radius:5px;font:inherit;font-weight:500;}
+  button:hover{background:#252b31;border-color:#3a424b;}
+  #genPauseBtn{background:var(--accent);color:#0d1a12;border:none;font-weight:600;}
+  #genPauseBtn:hover{background:#6dd89c;}
+
+  #main{flex:1;min-width:0;display:flex;flex-direction:column;height:100vh;}
+  canvas{flex:1;min-height:0;display:block;cursor:grab;touch-action:none;}
   canvas.dragging{cursor:grabbing;}
+  #statusbar{flex:0 0 auto;height:30px;box-sizing:border-box;background:var(--panel);
+    border-top:1px solid var(--border);display:flex;align-items:center;justify-content:flex-end;
+    gap:22px;padding:0 16px;font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;color:var(--muted);}
+  #statusbar b{color:var(--accent);font-weight:600;}
 
-  .movesetPreview{display:inline-grid;cursor:pointer;border:1px solid #444;background:#0c0c0c;padding:1px;}
-  .gridCell{background:#1a1a1a;box-sizing:border-box;border:1px solid #222;}
+  .movesetPreview,.movesetGrid{display:grid;gap:1px;background:#000;border:1px solid var(--border);}
+  .movesetPreview{cursor:pointer;flex-shrink:0;}
+  .movesetPreview:hover{border-color:var(--accent2);}
+  .gridCell{background:#1a1e23;box-sizing:border-box;}
   .gridCell.origin{background:#555;}
-  .gridCell.selected{background:#5ac85a;}
+  .gridCell.selected{background:var(--accent);}
   .gridCell.editable{cursor:pointer;}
-  .gridCell.editable:hover{outline:1px solid #8f8;}
+  .gridCell.editable:hover{outline:1px solid var(--accent2);outline-offset:-1px;}
 
-  .enemiesBox{display:flex;gap:4px;align-items:center;flex-wrap:wrap;}
-  .avoidsLabel{color:#888;font-size:11px;}
+  .enemiesBox{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
+  .avoidsLabel{color:var(--muted);font-size:11px;}
   .enemySwatch{width:16px;height:16px;padding:0;border-radius:3px;border:2px solid #333;opacity:0.35;}
   .enemySwatch.active{opacity:1;border-color:#eee;}
 
-  .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:20;align-items:center;justify-content:center;}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:20;align-items:center;justify-content:center;}
   .overlay:not([hidden]){display:flex;}
   .overlay[hidden]{display:none;}
-  .editorBox{background:#1b1b1b;border:1px solid #444;border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:8px;max-width:90vw;max-height:90vh;overflow:auto;}
+  .editorBox{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;
+    display:flex;flex-direction:column;gap:10px;max-width:90vw;max-height:90vh;overflow:auto;
+    box-shadow:0 10px 40px rgba(0,0,0,0.5);}
   .editorRow{display:flex;gap:10px;align-items:center;justify-content:space-between;}
-  .editorMain{display:flex;gap:12px;align-items:flex-start;}
-  .movesetGrid{display:grid;gap:1px;background:#000;padding:2px;flex-shrink:0;}
-  #editorText{flex:1;width:260px;max-width:60vw;background:#111;color:#ddd;border:1px solid #444;font-family:monospace;font-size:12px;resize:vertical;}
-  .parseIssues{white-space:pre-wrap;color:#e88;font-family:monospace;font-size:11px;max-width:360px;}
+  .editorMain{display:flex;gap:14px;align-items:flex-start;}
+  #editorText{flex:1;width:260px;max-width:60vw;font-family:ui-monospace,monospace;font-size:12px;resize:vertical;}
+  .parseIssues{white-space:pre-wrap;color:#e88;font-family:ui-monospace,monospace;font-size:11px;max-width:360px;}
 </style>
 </head>
 <body>
-<div id="controls">
-  <div class="col">
+<div id="sidebar">
+  <h1>FractalChess</h1>
+  <div class="section">
+    <div class="sectionLabel">Pieces</div>
     <div id="pieceList"></div>
     <button id="addPiece">+ Add piece</button>
   </div>
-  <div class="col">
-    <label>View size
-      <select id="texSize">
-        <option>128</option><option>256</option><option>512</option>
-        <option selected>1024</option><option>2048</option><option>4096</option><option>8192</option>
-      </select>
-    </label>
+  <div class="section">
+    <div class="sectionLabel">View size</div>
+    <select id="texSize">
+      <option>128</option><option>256</option><option>512</option>
+      <option selected>1024</option><option>2048</option><option>4096</option><option>8192</option>
+    </select>
     <button id="genPauseBtn">Generate</button>
   </div>
-  <div id="stats">loading wasm core...</div>
 </div>
-<canvas id="glcanvas"></canvas>
+<div id="main">
+  <canvas id="glcanvas"></canvas>
+  <div id="statusbar">
+    <span>placed: <b id="statPlaced">0</b></span>
+    <span>colors: <b id="statColors">0</b></span>
+  </div>
+</div>
 <div id="editorOverlay" class="overlay" hidden>
   <div class="editorBox">
     <div class="editorRow">
@@ -185,11 +220,7 @@ function draw(){
   gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
 }
 function resizeCanvas(){
-  const barHeight = document.getElementById('controls').offsetHeight;
-  const w = window.innerWidth, h = window.innerHeight - barHeight;
-  canvas.style.top = barHeight+'px';
-  canvas.style.width = w+'px';
-  canvas.style.height = h+'px';
+  const w = canvas.clientWidth, h = canvas.clientHeight;
   if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; }
 }
 window.addEventListener('resize', ()=>{ resizeCanvas(); draw(); });
@@ -222,8 +253,8 @@ function updateGenPauseBtn(){
   document.getElementById('genPauseBtn').textContent = (loopRunning && !paused) ? 'Stop' : 'Generate';
 }
 function updateStats(){
-  document.getElementById('stats').textContent =
-    `placed: ${Math.round(wasmMod.placed_count())}\ncolors: ${numPlayers}`;
+  document.getElementById('statPlaced').textContent = Math.round(wasmMod.placed_count()).toLocaleString();
+  document.getElementById('statColors').textContent = numPlayers;
 }
 
 // ---------- piece list UI ----------
@@ -231,20 +262,34 @@ const NAMED = ['knight','wazir','ferz','dabbaba','alfil','dromedary','zebra','an
 
 function hasOffset(offs,x,y){ return offs.some(([dx,dy])=>dx===x&&dy===y); }
 
-function renderMiniGrid(container, offsets, cellPx){
-  container.innerHTML='';
-  let r = 2;
+// Fixed overall box size, cell size scales to fit the radius -- so every
+// piece's preview (and the editor grid at any radius) occupies the same
+// footprint instead of the layout growing/shrinking and shifting controls
+// around as pieces or radius change.
+const PREVIEW_BOX = 52;
+const EDITOR_BOX = 320;
+function offsetsRadius(offsets){
+  let r = 1;
   for(const [dx,dy] of offsets) r = Math.max(r, Math.abs(dx), Math.abs(dy));
-  r = Math.min(r, 6);
-  container.style.gridTemplateColumns = `repeat(${2*r+1}, ${cellPx}px)`;
-  for(let y=r; y>=-r; y--){
-    for(let x=-r; x<=r; x++){
+  return Math.min(r, 12);
+}
+function renderGrid(container, offsets, radius, boxPx, interactive, onToggle){
+  container.innerHTML='';
+  const n = 2*radius+1;
+  const cellPx = Math.max(2, Math.floor(boxPx/n));
+  container.style.gridTemplateColumns = `repeat(${n}, ${cellPx}px)`;
+  container.style.gridAutoRows = `${cellPx}px`;
+  for(let y=radius; y>=-radius; y--){
+    for(let x=-radius; x<=radius; x++){
       const c = document.createElement('div');
       c.className = 'gridCell';
-      c.style.width = c.style.height = cellPx+'px';
-      if(x===0 && y===0) c.classList.add('origin');
+      const isOrigin = x===0 && y===0;
+      if(isOrigin) c.classList.add('origin');
       else if(hasOffset(offsets,x,y)) c.classList.add('selected');
-      c.dataset.x = x; c.dataset.y = y;
+      if(interactive && !isOrigin){
+        c.classList.add('editable');
+        c.addEventListener('click', ()=>onToggle(x,y));
+      }
       container.appendChild(c);
     }
   }
@@ -264,20 +309,20 @@ function pieceRow(defaultPiece, defaultColor){
   sel.value = defaultPiece;
   sel.addEventListener('change', ()=>{
     if(sel.value!=='custom') row._offsets = PIECE_BASE[sel.value].map(p=>p.slice());
-    renderMiniGrid(preview, row._offsets, 4);
+    renderGrid(preview, row._offsets, offsetsRadius(row._offsets), PREVIEW_BOX, false);
   });
 
   const preview = document.createElement('div');
   preview.className='movesetPreview';
   preview.title = 'Click to edit moveset';
   preview.addEventListener('click', ()=>openEditor(row, sel));
-  renderMiniGrid(preview, row._offsets, 4);
+  renderGrid(preview, row._offsets, offsetsRadius(row._offsets), PREVIEW_BOX, false);
 
   const color = document.createElement('input'); color.type='color'; color.value=defaultColor;
   color.addEventListener('input', refreshAllEnemyUI);
 
-  const rm = document.createElement('button'); rm.textContent='x';
-  rm.addEventListener('click', ()=>{ row.remove(); refreshAllEnemyUI(); if(ready){ resizeCanvas(); draw(); } });
+  const rm = document.createElement('button'); rm.className='rmBtn'; rm.textContent='×';
+  rm.addEventListener('click', ()=>{ row.remove(); refreshAllEnemyUI(); });
 
   const enemiesBox = document.createElement('div');
   enemiesBox.className='enemiesBox';
@@ -323,7 +368,6 @@ function addPieceRow(preset, color){
   pieceList.appendChild(row);
   for(const other of existing){ row._enemies.add(other); other._enemies.add(row); }
   refreshAllEnemyUI();
-  if(ready){ resizeCanvas(); draw(); }
   return row;
 }
 addPieceRow('knight','#000000');
@@ -341,36 +385,21 @@ const editorRadiusInput = document.getElementById('editorRadius');
 const editorText = document.getElementById('editorText');
 const editorIssues = document.getElementById('editorParseIssues');
 
+function updateRowPreview(row){
+  renderGrid(row.querySelector('.movesetPreview'), row._offsets, offsetsRadius(row._offsets), PREVIEW_BOX, false);
+}
 function renderEditorGrid(){
-  editorGrid.innerHTML='';
-  const r = editorRadius;
-  editorGrid.style.gridTemplateColumns = `repeat(${2*r+1}, 22px)`;
-  editorGrid.style.gridAutoRows = '22px';
-  for(let y=r; y>=-r; y--){
-    for(let x=-r; x<=r; x++){
-      const c = document.createElement('div');
-      c.className='gridCell editable';
-      if(x===0 && y===0){
-        c.classList.add('origin');
-      } else {
-        if(hasOffset(editingRow._offsets,x,y)) c.classList.add('selected');
-        c.addEventListener('click', ()=>{
-          const idx = editingRow._offsets.findIndex(([dx,dy])=>dx===x&&dy===y);
-          if(idx>=0) editingRow._offsets.splice(idx,1); else editingRow._offsets.push([x,y]);
-          if(editingSelect) editingSelect.value = 'custom';
-          renderEditorGrid();
-          renderMiniGrid(editingRow.querySelector('.movesetPreview'), editingRow._offsets, 4);
-        });
-      }
-      editorGrid.appendChild(c);
-    }
-  }
+  renderGrid(editorGrid, editingRow._offsets, editorRadius, EDITOR_BOX, true, (x,y)=>{
+    const idx = editingRow._offsets.findIndex(([dx,dy])=>dx===x&&dy===y);
+    if(idx>=0) editingRow._offsets.splice(idx,1); else editingRow._offsets.push([x,y]);
+    if(editingSelect) editingSelect.value = 'custom';
+    renderEditorGrid();
+    updateRowPreview(editingRow);
+  });
 }
 function openEditor(row, sel){
   editingRow = row; editingSelect = sel;
-  let r = 1;
-  for(const [dx,dy] of row._offsets) r = Math.max(r, Math.abs(dx), Math.abs(dy));
-  editorRadius = Math.min(r, 12);
+  editorRadius = offsetsRadius(row._offsets);
   editorRadiusInput.value = editorRadius;
   editorText.value = '';
   editorIssues.textContent = '';
@@ -412,12 +441,10 @@ document.getElementById('editorAddBtn').addEventListener('click', ()=>{
     }
   }
   if(editingSelect) editingSelect.value = 'custom';
-  let r = editorRadius;
-  for(const [dx,dy] of editingRow._offsets) r = Math.max(r, Math.abs(dx), Math.abs(dy));
-  editorRadius = Math.min(r, 12);
+  editorRadius = Math.max(editorRadius, offsetsRadius(editingRow._offsets));
   editorRadiusInput.value = editorRadius;
   renderEditorGrid();
-  renderMiniGrid(editingRow.querySelector('.movesetPreview'), editingRow._offsets, 4);
+  updateRowPreview(editingRow);
   editorIssues.textContent = issues.join('\n');
   editorText.value = '';
 });
