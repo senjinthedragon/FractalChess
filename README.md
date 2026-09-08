@@ -4,13 +4,13 @@ Not a true fractal, but it produces surprisingly rich, self-similar-looking patt
 
 ## The rule
 
-Cells are numbered outward from the center in a square spiral (0, 1, 2, 3, ...). Pick a set of colors, each assigned one chess-like "leaper" piece (knight, wazir, ferz, dabbaba, alfil, dromedary, zebra, antelope, or a custom jump). Colors take turns in order. On its turn, a color places its piece on the lowest-numbered empty cell that isn't currently under attack by another color's pieces already on the board.
+Cells are numbered outward from the center in a square spiral (0, 1, 2, 3, ...). Pick a set of colors, each assigned one chess-like "leaper" piece (knight, wazir, ferz, dabbaba, alfil, dromedary, zebra, antelope, or a custom moveset). Colors take turns in order. On its turn, a color places its piece on the lowest-numbered empty cell that isn't currently under attack by another color's pieces already on the board.
 
-That's it — no other rules. Run it for a while and watch the boundaries between colors' territory.
+That's the base rule — but which "other colors" count as attackers is itself configurable per piece (click a colored swatch under a piece to toggle whether it avoids that color; defaults to everyone avoiding everyone), and custom movesets don't have to be symmetric like a real chess piece — click the small grid preview under a piece to open the moveset editor, where you can toggle individual target squares directly, or paste in moves as text (`(x, y)`, `x y`, `x, y`, or `[x, y]`, one per line; prefix a line with `@` to expand it to all 8 symmetric variants at once).
 
 ## Try it
 
-Open `index.html` directly in a browser — it's fully self-contained (the simulation core is a WebAssembly module embedded inline), no server or build step needed. Pick some pieces and colors, hit Generate, then drag to pan and scroll to zoom around the result.
+Open `index.html` directly in a browser — it's fully self-contained (the simulation core is a WebAssembly module embedded inline), no server or build step needed. Pick some pieces and colors, hit Generate, then drag (or one-finger swipe on touch) to pan and scroll (or pinch) to zoom around the result.
 
 ## How it's built
 
