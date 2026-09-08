@@ -8,11 +8,11 @@
   html,body{margin:0;padding:0;background:#111;color:#ddd;font:13px/1.4 system-ui,sans-serif;overflow:hidden;height:100%;}
   #controls{position:fixed;top:0;left:0;right:0;z-index:10;background:#1b1b1b;border-bottom:1px solid #333;
     padding:8px 10px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;}
-  #pieceList{display:flex;flex-direction:column;gap:4px;}
-  .pieceRow{display:flex;gap:6px;align-items:center;}
-  .pieceRow select{background:#222;color:#ddd;border:1px solid #444;}
-  .pieceRow input[type=number]{width:46px;background:#222;color:#ddd;border:1px solid #444;}
-  .pieceRow button{background:#402020;color:#ddd;border:1px solid #663333;cursor:pointer;}
+  #pieceList{display:flex;flex-direction:column;gap:8px;}
+  .pieceRow{display:flex;flex-direction:column;gap:3px;padding-bottom:6px;border-bottom:1px solid #2a2a2a;}
+  .pieceHeader{display:flex;gap:6px;align-items:center;}
+  .pieceHeader select{background:#222;color:#ddd;border:1px solid #444;}
+  .pieceHeader > button{background:#402020;color:#ddd;border:1px solid #663333;cursor:pointer;padding:2px 7px;}
   .col{display:flex;flex-direction:column;gap:4px;}
   button{cursor:pointer;background:#2a2a2a;color:#ddd;border:1px solid #444;padding:4px 8px;border-radius:3px;}
   button:hover{background:#333;}
@@ -21,6 +21,25 @@
   #genPauseBtn{margin-top:8px;}
   canvas{position:fixed;left:0;cursor:grab;touch-action:none;}
   canvas.dragging{cursor:grabbing;}
+
+  .movesetPreview{display:inline-grid;cursor:pointer;border:1px solid #444;background:#0c0c0c;padding:1px;}
+  .gridCell{background:#1a1a1a;box-sizing:border-box;border:1px solid #222;}
+  .gridCell.origin{background:#555;}
+  .gridCell.selected{background:#5ac85a;}
+  .gridCell.editable{cursor:pointer;}
+  .gridCell.editable:hover{outline:1px solid #8f8;}
+
+  .enemiesBox{display:flex;gap:4px;align-items:center;flex-wrap:wrap;}
+  .avoidsLabel{color:#888;font-size:11px;}
+  .enemySwatch{width:16px;height:16px;padding:0;border-radius:3px;border:2px solid #333;opacity:0.35;}
+  .enemySwatch.active{opacity:1;border-color:#eee;}
+
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:20;display:flex;align-items:center;justify-content:center;}
+  .editorBox{background:#1b1b1b;border:1px solid #444;border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:8px;max-width:90vw;max-height:90vh;overflow:auto;}
+  .editorRow{display:flex;gap:10px;align-items:center;justify-content:space-between;}
+  .movesetGrid{display:grid;gap:1px;background:#000;padding:2px;align-self:center;}
+  #editorText{width:360px;max-width:70vw;background:#111;color:#ddd;border:1px solid #444;font-family:monospace;font-size:12px;}
+  .parseIssues{white-space:pre-wrap;color:#e88;font-family:monospace;font-size:11px;max-width:360px;}
 </style>
 </head>
 <body>
@@ -41,6 +60,21 @@
   <div id="stats">loading wasm core...</div>
 </div>
 <canvas id="glcanvas"></canvas>
+<div id="editorOverlay" class="overlay" hidden>
+  <div class="editorBox">
+    <div class="editorRow">
+      <strong>Edit moveset</strong>
+      <label>Grid radius <input type="number" id="editorRadius" min="1" max="12" value="3"></label>
+    </div>
+    <div id="editorGrid" class="movesetGrid"></div>
+    <textarea id="editorText" rows="4" placeholder="One move per line: (x, y), x y, x, y, or [x, y]. Prefix with @ to add all symmetries."></textarea>
+    <div class="editorRow">
+      <button id="editorAddBtn">Add</button>
+      <button id="editorDoneBtn">Done</button>
+    </div>
+    <div id="editorParseIssues" class="parseIssues"></div>
+  </div>
+</div>
 <script type="module">
 import init, * as wasmMod from './wasm-pkg/wasm_core.js';
 
@@ -189,33 +223,197 @@ function updateStats(){
 
 // ---------- piece list UI ----------
 const NAMED = ['knight','wazir','ferz','dabbaba','alfil','dromedary','zebra','antelope','custom'];
+
+function hasOffset(offs,x,y){ return offs.some(([dx,dy])=>dx===x&&dy===y); }
+
+function renderMiniGrid(container, offsets, cellPx){
+  container.innerHTML='';
+  let r = 2;
+  for(const [dx,dy] of offsets) r = Math.max(r, Math.abs(dx), Math.abs(dy));
+  r = Math.min(r, 6);
+  container.style.gridTemplateColumns = `repeat(${2*r+1}, ${cellPx}px)`;
+  for(let y=r; y>=-r; y--){
+    for(let x=-r; x<=r; x++){
+      const c = document.createElement('div');
+      c.className = 'gridCell';
+      c.style.width = c.style.height = cellPx+'px';
+      if(x===0 && y===0) c.classList.add('origin');
+      else if(hasOffset(offsets,x,y)) c.classList.add('selected');
+      c.dataset.x = x; c.dataset.y = y;
+      container.appendChild(c);
+    }
+  }
+}
+
 function pieceRow(defaultPiece, defaultColor){
   const row = document.createElement('div');
   row.className='pieceRow';
+  row._offsets = (PIECE_BASE[defaultPiece]||[]).map(p=>p.slice());
+  row._enemies = new Set();
+
+  const header = document.createElement('div');
+  header.className='pieceHeader';
+
   const sel = document.createElement('select');
   for(const n of NAMED){ const o=document.createElement('option'); o.value=n; o.textContent=n[0].toUpperCase()+n.slice(1); sel.appendChild(o); }
   sel.value = defaultPiece;
-  const dx = document.createElement('input'); dx.type='number'; dx.value=2; dx.title='dx';
-  const dy = document.createElement('input'); dy.type='number'; dy.value=1; dy.title='dy';
-  dx.style.display = dy.style.display = sel.value==='custom' ? 'inline-block':'none';
-  sel.addEventListener('change', ()=>{ dx.style.display=dy.style.display = sel.value==='custom'?'inline-block':'none'; });
-  const color = document.createElement('input'); color.type='color'; color.value=defaultColor;
-  const rm = document.createElement('button'); rm.textContent='x';
-  rm.addEventListener('click', ()=>{ row.remove(); if(ready){ resizeCanvas(); draw(); } });
-  row.appendChild(sel); row.appendChild(dx); row.appendChild(dy); row.appendChild(color); row.appendChild(rm);
-  row._get = ()=>({
-    offsets: sel.value==='custom' ? expandLeaper(parseInt(dx.value)||0, parseInt(dy.value)||0) : PIECE_BASE[sel.value],
-    color: color.value
+  sel.addEventListener('change', ()=>{
+    if(sel.value!=='custom') row._offsets = PIECE_BASE[sel.value].map(p=>p.slice());
+    renderMiniGrid(preview, row._offsets, 4);
   });
+
+  const preview = document.createElement('div');
+  preview.className='movesetPreview';
+  preview.title = 'Click to edit moveset';
+  preview.addEventListener('click', ()=>openEditor(row, sel));
+  renderMiniGrid(preview, row._offsets, 4);
+
+  const color = document.createElement('input'); color.type='color'; color.value=defaultColor;
+  color.addEventListener('input', refreshAllEnemyUI);
+
+  const rm = document.createElement('button'); rm.textContent='x';
+  rm.addEventListener('click', ()=>{ row.remove(); refreshAllEnemyUI(); if(ready){ resizeCanvas(); draw(); } });
+
+  const enemiesBox = document.createElement('div');
+  enemiesBox.className='enemiesBox';
+  row._enemiesEl = enemiesBox;
+  row._colorEl = color;
+
+  header.appendChild(sel); header.appendChild(preview); header.appendChild(color); header.appendChild(rm);
+  row.appendChild(header);
+  row.appendChild(enemiesBox);
   return row;
 }
+
+function refreshAllEnemyUI(){
+  const rows = [...pieceList.children];
+  for(const row of rows){
+    const box = row._enemiesEl;
+    box.innerHTML='';
+    if(rows.length>1){
+      const label = document.createElement('span');
+      label.className='avoidsLabel';
+      label.textContent='avoids:';
+      box.appendChild(label);
+    }
+    for(const other of rows){
+      if(other===row) continue;
+      const sw = document.createElement('button');
+      sw.className = 'enemySwatch'+(row._enemies.has(other)?' active':'');
+      sw.style.background = other._colorEl.value;
+      sw.title = row._enemies.has(other) ? 'Avoiding this piece (click to stop)' : 'Not avoiding this piece (click to avoid)';
+      sw.addEventListener('click', ()=>{
+        if(row._enemies.has(other)) row._enemies.delete(other); else row._enemies.add(other);
+        refreshAllEnemyUI();
+      });
+      box.appendChild(sw);
+    }
+  }
+}
+
 const pieceList = document.getElementById('pieceList');
-pieceList.appendChild(pieceRow('knight','#000000'));
-pieceList.appendChild(pieceRow('knight','#cc2222'));
+function addPieceRow(preset, color){
+  const row = pieceRow(preset, color);
+  const existing = [...pieceList.children];
+  pieceList.appendChild(row);
+  for(const other of existing){ row._enemies.add(other); other._enemies.add(row); }
+  refreshAllEnemyUI();
+  if(ready){ resizeCanvas(); draw(); }
+  return row;
+}
+addPieceRow('knight','#000000');
+addPieceRow('knight','#cc2222');
 document.getElementById('addPiece').addEventListener('click', ()=>{
   const palette = ['#22aacc','#22cc55','#cc8822','#aa22cc','#cccc22','#444444'];
-  pieceList.appendChild(pieceRow('knight', palette[pieceList.children.length%palette.length]));
-  if(ready){ resizeCanvas(); draw(); }
+  addPieceRow('knight', palette[pieceList.children.length%palette.length]);
+});
+
+// ---------- moveset popup editor ----------
+let editingRow = null, editingSelect = null, editorRadius = 3;
+const editorOverlay = document.getElementById('editorOverlay');
+const editorGrid = document.getElementById('editorGrid');
+const editorRadiusInput = document.getElementById('editorRadius');
+const editorText = document.getElementById('editorText');
+const editorIssues = document.getElementById('editorParseIssues');
+
+function renderEditorGrid(){
+  editorGrid.innerHTML='';
+  const r = editorRadius;
+  editorGrid.style.gridTemplateColumns = `repeat(${2*r+1}, 22px)`;
+  for(let y=r; y>=-r; y--){
+    for(let x=-r; x<=r; x++){
+      const c = document.createElement('div');
+      c.className='gridCell editable';
+      if(x===0 && y===0){
+        c.classList.add('origin');
+      } else {
+        if(hasOffset(editingRow._offsets,x,y)) c.classList.add('selected');
+        c.addEventListener('click', ()=>{
+          const idx = editingRow._offsets.findIndex(([dx,dy])=>dx===x&&dy===y);
+          if(idx>=0) editingRow._offsets.splice(idx,1); else editingRow._offsets.push([x,y]);
+          if(editingSelect) editingSelect.value = 'custom';
+          renderEditorGrid();
+          renderMiniGrid(editingRow.querySelector('.movesetPreview'), editingRow._offsets, 4);
+        });
+      }
+      editorGrid.appendChild(c);
+    }
+  }
+}
+function openEditor(row, sel){
+  editingRow = row; editingSelect = sel;
+  let r = 3;
+  for(const [dx,dy] of row._offsets) r = Math.max(r, Math.abs(dx), Math.abs(dy));
+  editorRadius = Math.min(r, 12);
+  editorRadiusInput.value = editorRadius;
+  editorText.value = '';
+  editorIssues.textContent = '';
+  renderEditorGrid();
+  editorOverlay.hidden = false;
+}
+editorRadiusInput.addEventListener('input', ()=>{
+  editorRadius = Math.min(12, Math.max(1, parseInt(editorRadiusInput.value)||3));
+  renderEditorGrid();
+});
+document.getElementById('editorDoneBtn').addEventListener('click', ()=>{ editorOverlay.hidden = true; });
+
+function parseMoveLine(line){
+  let l = line.trim();
+  let symmetric = false;
+  if(l.startsWith('@')){ symmetric = true; l = l.slice(1).trim(); }
+  l = l.replace(/[()\[\]]/g,'');
+  const parts = l.split(/[,\s]+/).filter(Boolean);
+  if(parts.length !== 2) throw new Error(`can't parse "${line}"`);
+  const x = parseInt(parts[0],10), y = parseInt(parts[1],10);
+  if(!Number.isFinite(x) || !Number.isFinite(y)) throw new Error(`can't parse "${line}"`);
+  if(x===0 && y===0) throw new Error(`(0,0) isn't a valid move`);
+  return {x,y,symmetric};
+}
+document.getElementById('editorAddBtn').addEventListener('click', ()=>{
+  const lines = editorText.value.split('\n');
+  const issues = [];
+  for(let i=0;i<lines.length;i++){
+    const raw = lines[i];
+    if(!raw.trim()) continue;
+    try{
+      const {x,y,symmetric} = parseMoveLine(raw);
+      const pts = symmetric ? expandLeaper(x,y) : [[x,y]];
+      for(const [dx,dy] of pts){
+        if(!hasOffset(editingRow._offsets,dx,dy)) editingRow._offsets.push([dx,dy]);
+      }
+    } catch(err){
+      issues.push(`Line ${i+1}: ${err.message}`);
+    }
+  }
+  if(editingSelect) editingSelect.value = 'custom';
+  let r = editorRadius;
+  for(const [dx,dy] of editingRow._offsets) r = Math.max(r, Math.abs(dx), Math.abs(dy));
+  editorRadius = Math.min(r, 12);
+  editorRadiusInput.value = editorRadius;
+  renderEditorGrid();
+  renderMiniGrid(editingRow.querySelector('.movesetPreview'), editingRow._offsets, 4);
+  editorIssues.textContent = issues.join('\n');
+  editorText.value = '';
 });
 
 // ---------- generate / control ----------
@@ -226,11 +424,15 @@ function generate(){
   if(rows.length===0) return;
   wasmMod.config_reset();
   let maxOffset = 0;
-  for(const r of rows){
-    const {offsets,color} = r._get();
-    const [rr,gg,bb] = hexToRGB(color);
-    wasmMod.config_add_piece(rr,gg,bb, flattenOffsets(offsets));
-    for(const [dx,dy] of offsets) maxOffset = Math.max(maxOffset, Math.abs(dx), Math.abs(dy));
+  for(const row of rows){
+    const [rr,gg,bb] = hexToRGB(row._colorEl.value);
+    let mask = 0;
+    for(const enemy of row._enemies){
+      const j = rows.indexOf(enemy);
+      if(j!==-1) mask |= (1<<j);
+    }
+    wasmMod.config_add_piece(rr,gg,bb, flattenOffsets(row._offsets), mask);
+    for(const [dx,dy] of row._offsets) maxOffset = Math.max(maxOffset, Math.abs(dx), Math.abs(dy));
   }
   wasmMod.start(texSize);
   numPlayers = rows.length;

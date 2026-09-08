@@ -5,11 +5,12 @@
  * @param {number} g
  * @param {number} b
  * @param {Int32Array} offsets
+ * @param {number} enemy_mask
  */
-export function config_add_piece(r, g, b, offsets) {
+export function config_add_piece(r, g, b, offsets, enemy_mask) {
     const ptr0 = passArray32ToWasm0(offsets, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    wasm.config_add_piece(r, g, b, ptr0, len0);
+    wasm.config_add_piece(r, g, b, ptr0, len0, enemy_mask);
 }
 
 export function config_reset() {

@@ -8,6 +8,10 @@ struct Player {
     offsets: Vec<(i32, i32)>,
     rgba: [u8; 4],
     frontier: u64,
+    // Bitmask of which other player indices this piece checks attacks
+    // against. Lets a piece ignore specific colors instead of hardcoding
+    // "every other color is an enemy".
+    enemy_mask: u32,
 }
 
 struct State {
@@ -127,8 +131,9 @@ fn radius_to_index(rad: f64) -> u64 {
 // entry per reachable square and dominated memory use) — for each other
 // color's piece type, just probe the handful of squares C-offset directly.
 fn is_attacked_by_others(st: &mut State, coord: (i32, i32), ci: usize) -> bool {
+    let mask = st.players[ci].enemy_mask;
     for pj in 0..st.players.len() {
-        if pj == ci {
+        if pj == ci || (mask & (1u32 << pj)) == 0 {
             continue;
         }
         let n = st.players[pj].offsets.len();
@@ -213,7 +218,7 @@ pub fn config_reset() {
 }
 
 #[wasm_bindgen]
-pub fn config_add_piece(r: u8, g: u8, b: u8, offsets: &[i32]) {
+pub fn config_add_piece(r: u8, g: u8, b: u8, offsets: &[i32], enemy_mask: u32) {
     let mut offs = Vec::with_capacity(offsets.len() / 2);
     let mut i = 0;
     while i + 1 < offsets.len() {
@@ -225,6 +230,7 @@ pub fn config_add_piece(r: u8, g: u8, b: u8, offsets: &[i32]) {
             offsets: offs,
             rgba: [r, g, b, 255],
             frontier: 1,
+            enemy_mask,
         });
     });
 }

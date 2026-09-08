@@ -1,7 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 
-export function config_add_piece(r: number, g: number, b: number, offsets: Int32Array): void;
+export function config_add_piece(r: number, g: number, b: number, offsets: Int32Array, enemy_mask: number): void;
 
 export function config_reset(): void;
 
@@ -23,7 +23,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly config_add_piece: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly config_add_piece: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
     readonly config_reset: () => void;
     readonly pixel_ptr: () => number;
     readonly placed_count: () => number;

@@ -1,7 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
-export const config_add_piece: (a: number, b: number, c: number, d: number, e: number) => void;
+export const config_add_piece: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
 export const config_reset: () => void;
 export const pixel_ptr: () => number;
 export const placed_count: () => number;
