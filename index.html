@@ -39,8 +39,9 @@
   .overlay[hidden]{display:none;}
   .editorBox{background:#1b1b1b;border:1px solid #444;border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:8px;max-width:90vw;max-height:90vh;overflow:auto;}
   .editorRow{display:flex;gap:10px;align-items:center;justify-content:space-between;}
-  .movesetGrid{display:grid;gap:1px;background:#000;padding:2px;align-self:center;}
-  #editorText{width:360px;max-width:70vw;background:#111;color:#ddd;border:1px solid #444;font-family:monospace;font-size:12px;}
+  .editorMain{display:flex;gap:12px;align-items:flex-start;}
+  .movesetGrid{display:grid;gap:1px;background:#000;padding:2px;flex-shrink:0;}
+  #editorText{flex:1;width:260px;max-width:60vw;background:#111;color:#ddd;border:1px solid #444;font-family:monospace;font-size:12px;resize:vertical;}
   .parseIssues{white-space:pre-wrap;color:#e88;font-family:monospace;font-size:11px;max-width:360px;}
 </style>
 </head>
@@ -68,8 +69,10 @@
       <strong>Edit moveset</strong>
       <label>Grid radius <input type="number" id="editorRadius" min="1" max="12" value="3"></label>
     </div>
-    <div id="editorGrid" class="movesetGrid"></div>
-    <textarea id="editorText" rows="4" placeholder="One move per line: (x, y), x y, x, y, or [x, y]. Prefix with @ to add all symmetries."></textarea>
+    <div class="editorMain">
+      <div id="editorGrid" class="movesetGrid"></div>
+      <textarea id="editorText" rows="8" placeholder="One move per line: (x, y), x y, x, y, or [x, y]. Prefix with @ to add all symmetries."></textarea>
+    </div>
     <div class="editorRow">
       <button id="editorAddBtn">Add</button>
       <button id="editorDoneBtn">Done</button>
@@ -368,6 +371,7 @@ function renderEditorGrid(){
   editorGrid.innerHTML='';
   const r = editorRadius;
   editorGrid.style.gridTemplateColumns = `repeat(${2*r+1}, 22px)`;
+  editorGrid.style.gridAutoRows = '22px';
   for(let y=r; y>=-r; y--){
     for(let x=-r; x<=r; x++){
       const c = document.createElement('div');
