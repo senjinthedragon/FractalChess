@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>FractalChess</title>
 <style>
   html,body{margin:0;padding:0;background:#111;color:#ddd;font:13px/1.4 system-ui,sans-serif;overflow:hidden;height:100%;}
@@ -18,7 +19,7 @@
   select{padding:2px;}
   #stats{white-space:pre;font-family:monospace;color:#8f8;align-self:flex-start;}
   #genPauseBtn{margin-top:8px;}
-  canvas{position:fixed;left:0;cursor:grab;}
+  canvas{position:fixed;left:0;cursor:grab;touch-action:none;}
   canvas.dragging{cursor:grabbing;}
 </style>
 </head>
@@ -289,20 +290,60 @@ window.addEventListener('mousemove', e=>{
   lastX=e.clientX; lastY=e.clientY;
   draw();
 });
+// Zoom by `factor`, keeping whatever texture point is currently under
+// screen-pixel (sx,sy) fixed at that same screen position. Wheel zoom
+// anchors at screen center; pinch zoom anchors at the pinch midpoint.
+function zoomAtPoint(factor, sx, sy){
+  const oldZoom = camZoom;
+  camZoom = Math.min(200, Math.max(0.02, camZoom*factor));
+  const actual = camZoom/oldZoom;
+  panX = (sx-canvas.width/2)*(1-actual) + actual*panX;
+  panY = (sy-canvas.height/2)*(1-actual) + actual*panY;
+}
 canvas.addEventListener('wheel', e=>{
   if(!ready) return;
   e.preventDefault();
   const requested = e.deltaY>0 ? 1.15 : 1/1.15;
-  const oldZoom = camZoom;
-  camZoom = Math.min(200, Math.max(0.02, camZoom*requested));
-  const actual = camZoom/oldZoom;
-  // Rescale pan by the same factor so whatever point is currently at screen
-  // center stays there -- otherwise zoom would drift toward the texture's
-  // own center instead of pivoting on the visible area's center.
-  panX *= actual;
-  panY *= actual;
+  zoomAtPoint(requested, canvas.width/2, canvas.height/2);
   draw();
 }, {passive:false});
+
+// ---------- touch: one finger pans, two fingers pinch-zoom ----------
+let touchMode = null, pinchDist = 0, lastTouch = null;
+function touchXY(t){ const r = canvas.getBoundingClientRect(); return {x:t.clientX-r.left, y:t.clientY-r.top}; }
+function touchDist(a,b){ return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY); }
+canvas.addEventListener('touchstart', e=>{
+  if(!ready) return;
+  e.preventDefault();
+  if(e.touches.length===1){
+    touchMode='pan';
+    lastTouch = touchXY(e.touches[0]);
+  } else if(e.touches.length>=2){
+    touchMode='pinch';
+    pinchDist = touchDist(e.touches[0], e.touches[1]);
+  }
+}, {passive:false});
+canvas.addEventListener('touchmove', e=>{
+  if(!ready || !touchMode) return;
+  e.preventDefault();
+  if(touchMode==='pan' && e.touches.length===1){
+    const p = touchXY(e.touches[0]);
+    panX += p.x-lastTouch.x;
+    panY += p.y-lastTouch.y;
+    lastTouch = p;
+    draw();
+  } else if(touchMode==='pinch' && e.touches.length>=2){
+    const dist = touchDist(e.touches[0], e.touches[1]);
+    const mid = touchXY({clientX:(e.touches[0].clientX+e.touches[1].clientX)/2, clientY:(e.touches[0].clientY+e.touches[1].clientY)/2});
+    zoomAtPoint(dist/pinchDist, mid.x, mid.y);
+    pinchDist = dist;
+    draw();
+  }
+}, {passive:false});
+canvas.addEventListener('touchend', e=>{
+  if(e.touches.length===1){ touchMode='pan'; lastTouch = touchXY(e.touches[0]); }
+  else if(e.touches.length===0){ touchMode=null; }
+});
 
 (async function boot(){
   const bytes = base64ToBytes(WASM_B64);
