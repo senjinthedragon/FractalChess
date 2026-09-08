@@ -368,7 +368,7 @@ function renderEditorGrid(){
 }
 function openEditor(row, sel){
   editingRow = row; editingSelect = sel;
-  let r = 3;
+  let r = 1;
   for(const [dx,dy] of row._offsets) r = Math.max(r, Math.abs(dx), Math.abs(dy));
   editorRadius = Math.min(r, 12);
   editorRadiusInput.value = editorRadius;
