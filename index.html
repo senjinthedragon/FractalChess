@@ -108,8 +108,9 @@
   <div class="section">
     <div class="sectionLabel">Camera</div>
     <div class="buttonRow">
-      <button id="fitScreenBtn">Fit Screen</button>
-      <button id="pixelBtn">1:1 Pixel</button>
+      <button id="fitScreenBtn" title="Fit Screen: shrink to fit, nothing cropped">Fit</button>
+      <button id="fillScreenBtn" title="Fill Screen: fill the view, shorter edge cropped">Fill</button>
+      <button id="pixelBtn" title="1:1 Pixel: one texel per screen pixel">1:1</button>
     </div>
   </div>
 </div>
@@ -634,6 +635,12 @@ document.getElementById('genPauseBtn').addEventListener('click', ()=>{
 document.getElementById('fitScreenBtn').addEventListener('click', ()=>{
   if(!ready) return;
   camZoom = Math.min(canvas.width, canvas.height) / texSize;
+  panX = 0; panY = 0;
+  draw();
+});
+document.getElementById('fillScreenBtn').addEventListener('click', ()=>{
+  if(!ready) return;
+  camZoom = Math.max(canvas.width, canvas.height) / texSize;
   panX = 0; panY = 0;
   draw();
 });
