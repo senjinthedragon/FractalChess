@@ -78,7 +78,7 @@
   .editorRow.doneRow{justify-content:flex-end;}
   .editorMain{display:flex;gap:14px;align-items:flex-start;}
   .editorTextCol{display:flex;flex-direction:column;gap:8px;flex:1;min-width:200px;}
-  .editorTextCol #editorAddBtn{align-self:flex-start;}
+  .editorTextCol #editorAddBtn{align-self:flex-end;}
   #editorText{width:260px;max-width:60vw;font-family:ui-monospace,monospace;font-size:12px;resize:vertical;}
   .radiusLabel{display:flex;align-items:center;gap:8px;}
   .radiusStepper{display:flex;align-items:center;gap:4px;}
@@ -133,6 +133,7 @@
       </div>
     </div>
     <div class="editorRow doneRow">
+      <button id="editorCancelBtn">Cancel</button>
       <button id="editorDoneBtn">Done</button>
     </div>
   </div>
@@ -497,8 +498,10 @@ function renderEditorGrid(){
     updateRowPreview(editingRow);
   }, editingRow._color);
 }
+let editingSnapshot = null;
 function openEditor(row, sel){
   editingRow = row; editingSelect = sel;
+  editingSnapshot = { offsets: row._offsets.map(p=>p.slice()), color: row._color, selectValue: sel ? sel.value : null };
   editorRadius = offsetsRadius(row._offsets);
   editorRadiusInput.value = editorRadius;
   editorColorInput.value = row._color;
@@ -506,6 +509,15 @@ function openEditor(row, sel){
   editorIssues.textContent = '';
   renderEditorGrid();
   editorOverlay.hidden = false;
+}
+function closeEditor(){ editorOverlay.hidden = true; }
+function cancelEditor(){
+  editingRow._offsets = editingSnapshot.offsets;
+  editingRow._color = editingSnapshot.color;
+  if(editingSelect) editingSelect.value = editingSnapshot.selectValue;
+  updateRowPreview(editingRow);
+  refreshAllEnemyUI();
+  closeEditor();
 }
 editorColorInput.addEventListener('input', ()=>{
   editingRow._color = editorColorInput.value;
@@ -532,7 +544,8 @@ editorRadiusInput.addEventListener('input', ()=>{
 });
 document.getElementById('radiusDown').addEventListener('click', ()=>setEditorRadius(editorRadius-1));
 document.getElementById('radiusUp').addEventListener('click', ()=>setEditorRadius(editorRadius+1));
-document.getElementById('editorDoneBtn').addEventListener('click', ()=>{ editorOverlay.hidden = true; });
+document.getElementById('editorDoneBtn').addEventListener('click', closeEditor);
+document.getElementById('editorCancelBtn').addEventListener('click', cancelEditor);
 
 function parseMoveLine(line){
   let l = line.trim();
