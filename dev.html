@@ -75,12 +75,12 @@
     display:flex;flex-direction:column;gap:10px;max-width:90vw;max-height:90vh;overflow:auto;
     box-shadow:0 10px 40px rgba(0,0,0,0.5);}
   .editorRow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;}
-  .editorRow.doneRow{justify-content:flex-end;}
-  .editorMain{display:flex;gap:14px;align-items:flex-start;}
+  .editorRow.doneRow{justify-content:flex-end;margin-top:auto;padding-top:8px;}
+  .editorMain{display:flex;gap:14px;align-items:stretch;}
   .editorTextCol{display:flex;flex-direction:column;gap:8px;flex:1;min-width:200px;}
   .editorTextCol #editorAddBtn{align-self:flex-end;}
   #editorText{width:260px;max-width:60vw;font-family:ui-monospace,monospace;font-size:12px;resize:vertical;}
-  .radiusLabel{display:flex;align-items:center;gap:8px;}
+  .colorLabel,.radiusLabel{display:flex;align-items:center;gap:8px;}
   .radiusStepper{display:flex;align-items:center;gap:4px;}
   .stepBtn{width:34px;height:34px;padding:0;font-size:18px;line-height:1;touch-action:manipulation;}
   #editorRadius{width:36px;text-align:center;-moz-appearance:textfield;}
@@ -115,7 +115,7 @@
   <div class="editorBox">
     <div class="editorRow">
       <strong>Edit piece</strong>
-      <label>Color <input type="color" id="editorColor"></label>
+      <label class="colorLabel">Color <input type="color" id="editorColor"></label>
       <label class="radiusLabel">Grid radius
         <span class="radiusStepper">
           <button type="button" id="radiusDown" class="stepBtn">&minus;</button>
@@ -130,11 +130,11 @@
         <textarea id="editorText" rows="8" placeholder="One move per line: (x, y), x y, x, y, or [x, y]. Prefix with @ to add all symmetries."></textarea>
         <button id="editorAddBtn">Add</button>
         <div id="editorParseIssues" class="parseIssues"></div>
+        <div class="editorRow doneRow">
+          <button id="editorCancelBtn">Cancel</button>
+          <button id="editorDoneBtn">Done</button>
+        </div>
       </div>
-    </div>
-    <div class="editorRow doneRow">
-      <button id="editorCancelBtn">Cancel</button>
-      <button id="editorDoneBtn">Done</button>
     </div>
   </div>
 </div>
