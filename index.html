@@ -123,6 +123,7 @@
   <div class="section">
     <div class="sectionLabel">Export</div>
     <button id="downloadBtn" title="Save the full generated resolution, not just the current on-screen view">Download PNG</button>
+    <button id="copyLinkBtn" title="Copy a link that reproduces this exact piece setup">Copy Link</button>
   </div>
 </div>
 <div id="main">
@@ -206,6 +207,9 @@ function expandLeaper(a,b){
 function hexToRGB(hex){
   const n = parseInt(hex.slice(1),16);
   return [(n>>16)&255,(n>>8)&255,n&255];
+}
+function rgbToHex([r,g,b]){
+  return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
 }
 function flattenOffsets(offsets){
   const arr = new Int32Array(offsets.length*2);
@@ -528,6 +532,98 @@ function addPieceRow(preset, color){
   refreshAllEnemyUI();
   return row;
 }
+
+// ---------- shareable config link ----------
+// Packed binary, not JSON, so a config with several large custom movesets
+// still fits comfortably in a URL: per piece it's 3 bytes color + 4 bytes
+// enemy mask + 2 bytes offset count + 2 bytes per offset, no field names
+// or punctuation repeated for every value.
+function offsetsSetEqual(a,b){ return a.length===b.length && a.every(([x,y])=>hasOffset(b,x,y)); }
+function matchPresetName(offsets){
+  for(const name of Object.keys(PIECE_BASE)){
+    if(offsetsSetEqual(offsets, PIECE_BASE[name])) return name;
+  }
+  return 'custom';
+}
+function bytesToBase64Url(bytes){
+  let bin = '';
+  for(const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function base64UrlToBytes(str){
+  str = str.replace(/-/g,'+').replace(/_/g,'/');
+  while(str.length%4) str += '=';
+  const bin = atob(str);
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+function encodeConfig(){
+  const rows = [...pieceList.children];
+  const texSizeVal = parseInt(document.getElementById('texSize').value);
+  const parts = [1, texSizeVal&0xFF, (texSizeVal>>8)&0xFF, rows.length&0xFF];
+  for(let i=0;i<rows.length;i++){
+    const row = rows[i];
+    const [r,g,b] = hexToRGB(row._color);
+    let mask = 0;
+    for(const enemy of row._enemies){ const j = rows.indexOf(enemy); if(j!==-1) mask |= (1<<j); }
+    const offs = row._offsets;
+    parts.push(r,g,b, mask&0xFF,(mask>>8)&0xFF,(mask>>16)&0xFF,(mask>>24)&0xFF, offs.length&0xFF,(offs.length>>8)&0xFF);
+    for(const [dx,dy] of offs) parts.push(dx&0xFF, dy&0xFF);
+  }
+  return bytesToBase64Url(new Uint8Array(parts));
+}
+function decodeConfig(bytes){
+  let p = 1; // skip version byte
+  const texSizeVal = bytes[p] | (bytes[p+1]<<8); p += 2;
+  const numPieces = bytes[p++];
+  const pieces = [];
+  for(let i=0;i<numPieces;i++){
+    const r=bytes[p++], g=bytes[p++], b=bytes[p++];
+    const mask = (bytes[p] | (bytes[p+1]<<8) | (bytes[p+2]<<16) | (bytes[p+3]<<24)) >>> 0; p += 4;
+    const offCount = bytes[p] | (bytes[p+1]<<8); p += 2;
+    const offsets = [];
+    for(let k=0;k<offCount;k++){
+      let dx = bytes[p++], dy = bytes[p++];
+      if(dx>127) dx -= 256;
+      if(dy>127) dy -= 256;
+      offsets.push([dx,dy]);
+    }
+    pieces.push({color:[r,g,b], enemyMask:mask, offsets});
+  }
+  return {texSize:texSizeVal, pieces};
+}
+function loadConfig(cfg){
+  pieceList.innerHTML = '';
+  const rows = cfg.pieces.map(p=>{
+    const row = pieceRow(matchPresetName(p.offsets), rgbToHex(p.color));
+    row._offsets = p.offsets.map(o=>o.slice());
+    pieceList.appendChild(row);
+    updateRowPreview(row);
+    return row;
+  });
+  rows.forEach((row,i)=>{
+    row._enemies = new Set();
+    for(let j=0;j<rows.length;j++){
+      if(j!==i && (cfg.pieces[i].enemyMask & (1<<j))) row._enemies.add(rows[j]);
+    }
+  });
+  refreshAllEnemyUI();
+  document.getElementById('texSize').value = cfg.texSize;
+}
+document.getElementById('copyLinkBtn').addEventListener('click', async ()=>{
+  const url = location.origin + location.pathname + '#c=' + encodeConfig();
+  const btn = document.getElementById('copyLinkBtn');
+  const original = btn.textContent;
+  try{
+    await navigator.clipboard.writeText(url);
+    btn.textContent = 'Copied!';
+  } catch(e){
+    prompt('Copy this link:', url);
+  }
+  setTimeout(()=>{ btn.textContent = original; }, 1500);
+});
+
 addPieceRow('knight','#000000');
 addPieceRow('knight','#cc2222');
 document.getElementById('addPiece').addEventListener('click', ()=>{
@@ -807,6 +903,10 @@ canvas.addEventListener('touchcancel', ()=>{ touchMode=null; });
   initGL();
   resizeCanvas();
   ready = true;
+  if(location.hash.startsWith('#c=')){
+    try{ loadConfig(decodeConfig(base64UrlToBytes(location.hash.slice(3)))); }
+    catch(e){ console.warn('failed to load shared config from URL', e); }
+  }
   generate();
 })();
 </script>
