@@ -21,13 +21,10 @@ Open `index.html` directly in a browser — it's fully self-contained (the simul
 ### Rebuilding the WASM core
 
 ```
-cd wasm-core
-cargo build --release --target wasm32-unknown-unknown
-cd ..
-wasm-bindgen wasm-core/target/wasm32-unknown-unknown/release/wasm_core.wasm --target web --out-dir wasm-pkg
+./rebuild.sh
 ```
 
-That updates `wasm-pkg/` for `dev.html`. To refresh the inlined copy in `index.html`, base64-encode `wasm-pkg/wasm_core_bg.wasm` and swap it into the `WASM_B64` constant near the top of `index.html`'s script.
+Rebuilds the Rust core, regenerates `wasm-pkg/` (used by `dev.html`), and re-embeds the fresh binary into `index.html`'s `WASM_B64` constant, then regenerates `dev.html` from the result -- all three stay in sync in one step. (Building both by hand once let `index.html`'s embedded copy silently fall behind `wasm-pkg/` for several commits, since only `dev.html` picks up a `wasm-pkg/` rebuild automatically -- always use this script instead of running `cargo build`/`wasm-bindgen` directly.)
 
 ## Rendering notes
 
