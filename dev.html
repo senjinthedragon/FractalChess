@@ -26,7 +26,6 @@
     border:1px solid var(--border);border-radius:6px;}
   .pieceHeader{display:flex;gap:8px;align-items:center;}
   .pieceHeader select{flex:1;min-width:0;}
-  .colorDot{width:22px;height:22px;border-radius:4px;border:1px solid var(--border);flex-shrink:0;}
   .pieceHeader .rmBtn{background:#3a1f1f;color:#e4b4b4;border:1px solid #5a2c2c;flex-shrink:0;
     width:26px;height:26px;padding:0;border-radius:4px;}
   .pieceHeader .rmBtn:hover{background:#4a2626;}
@@ -320,11 +319,6 @@ function pieceRow(defaultPiece, defaultColor){
   preview.title = 'Click to edit moveset & color';
   preview.addEventListener('click', ()=>openEditor(row, sel));
 
-  const colorDot = document.createElement('div');
-  colorDot.className = 'colorDot';
-  colorDot.title = 'Piece color (set in the moveset editor)';
-  row._colorDot = colorDot;
-
   const rm = document.createElement('button'); rm.className='rmBtn'; rm.textContent='×';
   rm.addEventListener('click', ()=>{ row.remove(); refreshAllEnemyUI(); });
 
@@ -332,16 +326,11 @@ function pieceRow(defaultPiece, defaultColor){
   enemiesBox.className='enemiesBox';
   row._enemiesEl = enemiesBox;
 
-  header.appendChild(sel); header.appendChild(preview); header.appendChild(colorDot); header.appendChild(rm);
+  header.appendChild(sel); header.appendChild(preview); header.appendChild(rm);
   row.appendChild(header);
   row.appendChild(enemiesBox);
-  updateRowColor(row);
-  return row;
-}
-
-function updateRowColor(row){
-  row._colorDot.style.background = row._color;
   updateRowPreview(row);
+  return row;
 }
 
 function refreshAllEnemyUI(){
@@ -419,7 +408,7 @@ function openEditor(row, sel){
 }
 editorColorInput.addEventListener('input', ()=>{
   editingRow._color = editorColorInput.value;
-  updateRowColor(editingRow);
+  updateRowPreview(editingRow);
   renderEditorGrid();
   refreshAllEnemyUI();
 });
