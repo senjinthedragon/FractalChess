@@ -74,9 +74,16 @@
   .editorBox{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;
     display:flex;flex-direction:column;gap:10px;max-width:90vw;max-height:90vh;overflow:auto;
     box-shadow:0 10px 40px rgba(0,0,0,0.5);}
-  .editorRow{display:flex;gap:10px;align-items:center;justify-content:space-between;}
+  .editorRow{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;}
+  .editorRow.doneRow{justify-content:flex-end;}
   .editorMain{display:flex;gap:14px;align-items:flex-start;}
-  #editorText{flex:1;width:260px;max-width:60vw;font-family:ui-monospace,monospace;font-size:12px;resize:vertical;}
+  .editorTextCol{display:flex;flex-direction:column;gap:8px;flex:1;min-width:200px;}
+  .editorTextCol #editorAddBtn{align-self:flex-start;}
+  #editorText{width:260px;max-width:60vw;font-family:ui-monospace,monospace;font-size:12px;resize:vertical;}
+  .radiusLabel{display:flex;align-items:center;gap:8px;}
+  .radiusStepper{display:flex;align-items:center;gap:4px;}
+  .stepBtn{width:34px;height:34px;padding:0;font-size:18px;line-height:1;touch-action:manipulation;}
+  #editorRadius{width:36px;text-align:center;-moz-appearance:textfield;}
   .parseIssues{white-space:pre-wrap;color:#e88;font-family:ui-monospace,monospace;font-size:11px;max-width:360px;}
 </style>
 </head>
@@ -109,17 +116,25 @@
     <div class="editorRow">
       <strong>Edit piece</strong>
       <label>Color <input type="color" id="editorColor"></label>
-      <label>Grid radius <input type="number" id="editorRadius" min="1" max="12" value="3"></label>
+      <label class="radiusLabel">Grid radius
+        <span class="radiusStepper">
+          <button type="button" id="radiusDown" class="stepBtn">&minus;</button>
+          <input type="number" id="editorRadius" min="1" max="12" value="3">
+          <button type="button" id="radiusUp" class="stepBtn">+</button>
+        </span>
+      </label>
     </div>
     <div class="editorMain">
       <div id="editorGrid" class="movesetGrid"></div>
-      <textarea id="editorText" rows="8" placeholder="One move per line: (x, y), x y, x, y, or [x, y]. Prefix with @ to add all symmetries."></textarea>
+      <div class="editorTextCol">
+        <textarea id="editorText" rows="8" placeholder="One move per line: (x, y), x y, x, y, or [x, y]. Prefix with @ to add all symmetries."></textarea>
+        <button id="editorAddBtn">Add</button>
+        <div id="editorParseIssues" class="parseIssues"></div>
+      </div>
     </div>
-    <div class="editorRow">
-      <button id="editorAddBtn">Add</button>
+    <div class="editorRow doneRow">
       <button id="editorDoneBtn">Done</button>
     </div>
-    <div id="editorParseIssues" class="parseIssues"></div>
   </div>
 </div>
 <script type="module">
@@ -472,8 +487,8 @@ editorColorInput.addEventListener('input', ()=>{
   renderEditorGrid();
   refreshAllEnemyUI();
 });
-editorRadiusInput.addEventListener('input', ()=>{
-  const newRadius = Math.min(12, Math.max(1, parseInt(editorRadiusInput.value)||3));
+function setEditorRadius(newRadius){
+  newRadius = Math.min(12, Math.max(1, newRadius));
   if(newRadius < editorRadius){
     // Shrinking the radius means "this piece's reach is now this small" --
     // moves that fall outside it are discarded, not just hidden from view.
@@ -482,9 +497,15 @@ editorRadiusInput.addEventListener('input', ()=>{
     if(editingRow._offsets.length !== before && editingSelect) editingSelect.value = 'custom';
   }
   editorRadius = newRadius;
+  editorRadiusInput.value = editorRadius;
   renderEditorGrid();
   updateRowPreview(editingRow);
+}
+editorRadiusInput.addEventListener('input', ()=>{
+  setEditorRadius(parseInt(editorRadiusInput.value)||editorRadius);
 });
+document.getElementById('radiusDown').addEventListener('click', ()=>setEditorRadius(editorRadius-1));
+document.getElementById('radiusUp').addEventListener('click', ()=>setEditorRadius(editorRadius+1));
 document.getElementById('editorDoneBtn').addEventListener('click', ()=>{ editorOverlay.hidden = true; });
 
 function parseMoveLine(line){
