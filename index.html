@@ -113,6 +113,10 @@
       <button id="pixelBtn" title="1:1 Pixel: one texel per screen pixel">1:1</button>
     </div>
   </div>
+  <div class="section">
+    <div class="sectionLabel">Export</div>
+    <button id="downloadBtn" title="Save the full generated resolution, not just the current on-screen view">Download PNG</button>
+  </div>
 </div>
 <div id="main">
   <canvas id="glcanvas"></canvas>
@@ -649,6 +653,28 @@ document.getElementById('pixelBtn').addEventListener('click', ()=>{
   camZoom = 1;
   panX = 0; panY = 0;
   draw();
+});
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  if(!ready) return;
+  // Export the raw generated pixel buffer directly, at full resolution --
+  // not the WebGL canvas's current on-screen view, which is limited to
+  // window size and whatever zoom/pan/cropping is currently framed.
+  const ptr = wasmMod.pixel_ptr();
+  const src = new Uint8Array(wasmExports.memory.buffer, ptr, texSize*texSize*4);
+  const imgData = new ImageData(new Uint8ClampedArray(src), texSize, texSize);
+  const off = document.createElement('canvas');
+  off.width = texSize; off.height = texSize;
+  off.getContext('2d').putImageData(imgData, 0, 0);
+  off.toBlob(blob=>{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fractalchess-${texSize}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
 });
 
 // ---------- pan / zoom ----------
