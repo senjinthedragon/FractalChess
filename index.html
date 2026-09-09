@@ -19,6 +19,8 @@
     padding:16px;display:flex;flex-direction:column;gap:18px;}
   #sidebar h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.02em;color:var(--text);}
   #sidebar .section{display:flex;flex-direction:column;gap:8px;}
+  .buttonRow{display:flex;gap:8px;}
+  .buttonRow button{flex:1;}
   #sidebar .sectionLabel{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
 
   #pieceList{display:flex;flex-direction:column;gap:10px;}
@@ -102,6 +104,13 @@
       <option selected>1024</option><option>2048</option><option>4096</option><option>8192</option>
     </select>
     <button id="genPauseBtn">Generate</button>
+  </div>
+  <div class="section">
+    <div class="sectionLabel">Camera</div>
+    <div class="buttonRow">
+      <button id="fitScreenBtn">Fit Screen</button>
+      <button id="pixelBtn">1:1 Pixel</button>
+    </div>
   </div>
 </div>
 <div id="main">
@@ -621,6 +630,18 @@ document.getElementById('genPauseBtn').addEventListener('click', ()=>{
   } else {
     generate();
   }
+});
+document.getElementById('fitScreenBtn').addEventListener('click', ()=>{
+  if(!ready) return;
+  camZoom = Math.min(canvas.width, canvas.height) / texSize;
+  panX = 0; panY = 0;
+  draw();
+});
+document.getElementById('pixelBtn').addEventListener('click', ()=>{
+  if(!ready) return;
+  camZoom = 1;
+  panX = 0; panY = 0;
+  draw();
 });
 
 // ---------- pan / zoom ----------
