@@ -24,7 +24,11 @@
   #pieceList{display:flex;flex-direction:column;gap:10px;}
   .pieceRow{display:flex;flex-direction:column;gap:6px;padding:8px;background:var(--panel2);
     border:1px solid var(--border);border-radius:6px;}
+  .pieceRow.dragging{opacity:0.5;border-color:var(--accent2);}
   .pieceHeader{display:flex;gap:8px;align-items:center;}
+  .dragHandle{flex-shrink:0;width:16px;text-align:center;color:var(--muted);
+    cursor:grab;touch-action:none;user-select:none;font-size:14px;}
+  .dragHandle:active{cursor:grabbing;}
   .pieceHeader select{flex:1;min-width:0;}
   .pieceHeader .rmBtn{background:#3a1f1f;color:#e4b4b4;border:1px solid #5a2c2c;flex-shrink:0;
     width:26px;height:26px;padding:0;border-radius:4px;}
@@ -332,6 +336,12 @@ function pieceRow(defaultPiece, defaultColor){
   const header = document.createElement('div');
   header.className='pieceHeader';
 
+  const handle = document.createElement('div');
+  handle.className = 'dragHandle';
+  handle.textContent = '⠿';
+  handle.title = 'Drag to reorder (changes turn order)';
+  handle.addEventListener('pointerdown', e=>startDrag(row, handle, e));
+
   const sel = document.createElement('select');
   for(const n of NAMED){ const o=document.createElement('option'); o.value=n; o.textContent=n[0].toUpperCase()+n.slice(1); sel.appendChild(o); }
   sel.value = defaultPiece;
@@ -352,11 +362,19 @@ function pieceRow(defaultPiece, defaultColor){
   enemiesBox.className='enemiesBox';
   row._enemiesEl = enemiesBox;
 
-  header.appendChild(sel); header.appendChild(preview); header.appendChild(rm);
+  header.appendChild(handle); header.appendChild(sel); header.appendChild(preview); header.appendChild(rm);
   row.appendChild(header);
   row.appendChild(enemiesBox);
   updateRowPreview(row);
   return row;
+}
+
+let dragRow = null;
+function startDrag(row, handle, e){
+  dragRow = row;
+  handle.setPointerCapture(e.pointerId);
+  row.classList.add('dragging');
+  e.preventDefault();
 }
 
 function refreshAllEnemyUI(){
@@ -386,6 +404,29 @@ function refreshAllEnemyUI(){
 }
 
 const pieceList = document.getElementById('pieceList');
+
+// ---------- drag-to-reorder (turn order follows row order in the DOM) ----------
+function rowAfterY(y){
+  const rows = [...pieceList.querySelectorAll('.pieceRow:not(.dragging)')];
+  for(const r of rows){
+    const box = r.getBoundingClientRect();
+    if(y < box.top + box.height/2) return r;
+  }
+  return null;
+}
+pieceList.addEventListener('pointermove', e=>{
+  if(!dragRow) return;
+  const after = rowAfterY(e.clientY);
+  if(after == null) pieceList.appendChild(dragRow);
+  else if(after !== dragRow) pieceList.insertBefore(dragRow, after);
+});
+window.addEventListener('pointerup', ()=>{
+  if(!dragRow) return;
+  dragRow.classList.remove('dragging');
+  dragRow = null;
+  refreshAllEnemyUI();
+});
+
 function addPieceRow(preset, color){
   const row = pieceRow(preset, color);
   const existing = [...pieceList.children];
