@@ -407,8 +407,17 @@ function openEditor(row, sel){
   editorOverlay.hidden = false;
 }
 editorRadiusInput.addEventListener('input', ()=>{
-  editorRadius = Math.min(12, Math.max(1, parseInt(editorRadiusInput.value)||3));
+  const newRadius = Math.min(12, Math.max(1, parseInt(editorRadiusInput.value)||3));
+  if(newRadius < editorRadius){
+    // Shrinking the radius means "this piece's reach is now this small" --
+    // moves that fall outside it are discarded, not just hidden from view.
+    const before = editingRow._offsets.length;
+    editingRow._offsets = editingRow._offsets.filter(([dx,dy])=>Math.abs(dx)<=newRadius && Math.abs(dy)<=newRadius);
+    if(editingRow._offsets.length !== before && editingSelect) editingSelect.value = 'custom';
+  }
+  editorRadius = newRadius;
   renderEditorGrid();
+  updateRowPreview(editingRow);
 });
 document.getElementById('editorDoneBtn').addEventListener('click', ()=>{ editorOverlay.hidden = true; });
 
